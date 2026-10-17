@@ -11,7 +11,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The current public-demo experience works without environment variables. Events, saved plans, bookings, published organiser events, and check-ins are stored in the browser using `localStorage`.
+Without Supabase variables, the app runs in a local demo mode. When the Supabase variables and migration are configured, events, saved plans, bookings, published organiser events, and check-ins use shared Supabase data.
 
 ## Verify locally
 
@@ -47,6 +47,45 @@ npm run build
 
 Every push to `main` will create a new production deployment. Pull requests can create preview deployments.
 
+## Connect Supabase (Step 3)
+
+The repository includes the database migration at:
+
+```text
+supabase/migrations/20261017000000_scene.sql
+```
+
+### Create the hosted project
+
+1. Create a project at [supabase.com/dashboard](https://supabase.com/dashboard).
+2. Open **Project Settings → API**.
+3. Copy the project URL and the publishable/anon key.
+4. Add them to `.env.local` locally:
+
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
+   ```
+
+5. Apply the migration. The CLI must be authenticated and linked to the project:
+
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref YOUR_PROJECT_REF
+   npm run db:push
+   ```
+
+   The migration creates `events`, `saved_events`, and `bookings`, seeds the sample events, enables Row Level Security, and adds secure booking, availability, and check-in functions.
+
+6. In Supabase **Authentication → URL Configuration**, set:
+   - Site URL: your Vercel production URL
+   - Redirect URL: `https://YOUR_VERCEL_DOMAIN/auth/confirm`
+   - Local redirect URL: `http://localhost:3000/auth/confirm`
+
+7. Add the same public variables to Vercel under **Settings → Environment Variables** for Production, Preview, and Development, then redeploy.
+
+When Supabase is configured, discovery remains public. Saving events, booking, publishing, viewing tickets, and checking in attendees require an account. Payment collection is intentionally not included yet; bookings are persisted reservations.
+
 ### Option B: Vercel CLI
 
 After installing the Vercel CLI and signing in:
@@ -69,7 +108,7 @@ After deployment, open the Vercel project and go to **Settings → Domains**. Ad
 
 ## Environment variables
 
-Supabase is already scaffolded for the next product phase. When real shared accounts and data are added, configure these variables in Vercel under **Settings → Environment Variables**:
+Supabase is scaffolded and the client switches to shared mode when these variables are configured:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
@@ -78,6 +117,6 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
 
 Do not commit `.env.local`, private API keys, payment secrets, or webhook secrets.
 
-## Next product phase
+## Local fallback
 
-The public demo currently uses browser storage. The next backend milestone is to move events, users, bookings, organiser dashboards, and check-ins to Supabase so all visitors share the same data.
+The app intentionally keeps a local fallback so it can still be previewed before a Supabase project is connected. Do not use local fallback mode for real ticket sales.

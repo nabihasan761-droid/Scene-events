@@ -5,6 +5,7 @@ export const cities = ["Mumbai", "Bengaluru", "New Delhi", "Hyderabad"];
 
 export const eventSchema = z.object({
   id: z.number().int().positive(),
+  organiserId: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(4).max(100),
   category: z.enum(["Music", "Food & drink", "Arts & culture", "Wellness"]),
   startsAt: z.string().datetime({ offset: true }),
@@ -110,10 +111,21 @@ export const stateSchema = z.object({
   version: z.literal(1),
   savedIds: z.array(z.number().int()),
   events: z.array(eventSchema),
+  managedEvents: z.array(eventSchema).default([]),
   bookings: z.array(bookingSchema),
+  managedBookings: z.array(bookingSchema).default([]),
+  availability: z.record(z.string(), z.number().int().min(0)).default({}),
 });
 export type SceneState = z.infer<typeof stateSchema>;
-export const emptyState: SceneState = { version: 1, savedIds: [], events: [], bookings: [] };
+export const emptyState: SceneState = {
+  version: 1,
+  savedIds: [],
+  events: seedEvents,
+  managedEvents: [],
+  bookings: [],
+  managedBookings: [],
+  availability: {},
+};
 export const STORAGE_KEY = "scene-mvp-v1";
 
 export function formatPrice(price: number) {

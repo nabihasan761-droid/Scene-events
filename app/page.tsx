@@ -17,17 +17,13 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  bookEvent,
-  Booking,
   categories,
-  categoryImages,
   cities,
   discoverEvents,
   EventFilters,
   EventItem,
   eventDate,
   formatPrice,
-  seedEvents,
 } from "@/lib/events";
 import { useSceneStore } from "@/lib/use-scene-store";
 import { MyTickets, TicketCheckout } from "@/components/ticket-checkout";
@@ -44,7 +40,7 @@ const initialFilters: EventFilters = {
 };
 
 export default function Home() {
-  const { state, ready, commit, storageError } = useSceneStore();
+  const { state, user, ready, supabaseEnabled, saveEvent, createEvent, book, checkIn, storageError } = useSceneStore();
   const [filters, setFilters] = useState<EventFilters>(initialFilters);
   const [cityOpen, setCityOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
@@ -57,30 +53,54 @@ export default function Home() {
     setCurrentTime(Date.now());
   }, []);
 
-  const events = useMemo(() => [...seedEvents, ...state.events], [state.events]);
+  const events = useMemo(() => state.events, [state.events]);
   const discovered = useMemo(() => discoverEvents(events, filters, state.savedIds, currentTime), [events, filters, state.savedIds, currentTime]);
-  const featuredEvent = discovered[0] ?? events.find((event) => event.published) ?? seedEvents[0];
+  const featuredEvent = discovered[0] ?? events.find((event) => event.published) ?? events[0];
 
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2800);
   };
 
-  const safeCommit = (update: Parameters<typeof commit>[0]) => {
+  const loginFor = (action: string) => {
+    notify(`Sign in to ${action}`);
+    window.setTimeout(() => {
+      window.location.assign(`/auth/login?next=${encodeURIComponent("/")}`);
+    }, 450);
+  };
+
+  const requireUser = (action: string) => {
+    if (supabaseEnabled && !user) {
+      loginFor(action);
+      return false;
+    }
+    return true;
+  };
+
+  const toggleSaved = async (id: number) => {
+    if (!requireUser("save events")) return;
     try {
-      return commit(update);
-    } catch {
-      notify("Could not save this demo action on your device");
-      return null;
+      const wasSaved = state.savedIds.includes(id);
+      await saveEvent(id);
+      notify(wasSaved ? "Removed from your saved plans" : "Saved to your plans");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "This plan could not be saved");
     }
   };
 
-  const toggleSaved = (id: number) => {
-    safeCommit((current) => ({
-      ...current,
-      savedIds: current.savedIds.includes(id) ? current.savedIds.filter((savedId) => savedId !== id) : [...current.savedIds, id],
-    }));
-    notify(state.savedIds.includes(id) ? "Removed from your saved plans" : "Saved to your plans");
+  const openTickets = (event: EventItem) => {
+    if (!requireUser("book tickets")) return;
+    setSelectedEvent(event);
+  };
+
+  const openTicketsList = () => {
+    if (!requireUser("view your tickets")) return;
+    setShowTickets(true);
+  };
+
+  const openOrganiser = () => {
+    if (!requireUser("host an event")) return;
+    setShowOrganiser(true);
   };
 
   const selectCity = (city: string) => {
@@ -93,36 +113,25 @@ export default function Home() {
     document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleBook = (details: { name: string; email: string; quantity: number }) => {
-    let created: Booking | null = null;
-    const next = safeCommit((current) => {
-      const result = bookEvent(current, selectedEvent?.id ?? -1, details, Date.now());
-      created = result.booking;
-      return result.state;
-    });
-    if (!next || !created) throw new Error("Booking could not be saved. Please try again.");
-    notify("Your demo ticket is ready");
+  const handleBook = async (details: { name: string; email: string; quantity: number }) => {
+    const created = await book(selectedEvent?.id ?? -1, details);
+    notify(supabaseEnabled ? "Your ticket is confirmed" : "Your demo ticket is ready");
     return created;
   };
 
-  const handleCreateEvent = (input: Omit<EventItem, "id" | "image" | "published">) => {
-    let created: EventItem | null = null;
-    const next = safeCommit((current) => {
-      const id = Math.max(0, ...events.map((event) => event.id), ...current.events.map((event) => event.id)) + 1;
-      created = { ...input, id, image: categoryImages[input.category], published: true };
-      return { ...current, events: [created, ...current.events] };
-    });
-    if (!next || !created) throw new Error("Your event could not be published. Please try again.");
-    notify("Your event is live on scene.");
+  const handleCreateEvent = async (input: Omit<EventItem, "id" | "image" | "published">) => {
+    const created = await createEvent(input);
+    notify(supabaseEnabled ? "Your event is live on scene." : "Your demo event is live on scene.");
     return created;
   };
 
-  const handleCheckIn = (bookingId: string) => {
-    safeCommit((current) => ({
-      ...current,
-      bookings: current.bookings.map((booking) => booking.id === bookingId ? { ...booking, checkedInAt: new Date().toISOString() } : booking),
-    }));
-    notify("Attendee checked in");
+  const handleCheckIn = async (bookingId: string) => {
+    try {
+      await checkIn(bookingId);
+      notify("Attendee checked in");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "This attendee could not be checked in");
+    }
   };
 
   return (
@@ -141,17 +150,17 @@ export default function Home() {
         <div className="hidden items-center gap-8 text-[13px] font-semibold text-[#6e6c66] md:flex">
           <a className="nav-link active" href="#explore">Explore</a>
           <a className="nav-link" href="#how-it-works">How it works</a>
-          <button className="nav-link" onClick={() => setShowOrganiser(true)}>For organisers</button>
+          <button className="nav-link" onClick={openOrganiser}>For organisers</button>
         </div>
         <div className="flex items-center gap-2.5">
           <button className="saved-link hidden sm:flex" onClick={() => { setFilters((current) => ({ ...current, savedOnly: true })); document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" }); }}>
             <Heart size={16} strokeWidth={2.2} /><span>Saved</span>{state.savedIds.length > 0 && <b>{state.savedIds.length}</b>}
           </button>
-          <button className="saved-link hidden md:flex" onClick={() => setShowTickets(true)}>
+          <button className="saved-link hidden md:flex" onClick={openTicketsList}>
             <Ticket size={16} strokeWidth={2.2} /><span>My tickets</span>{state.bookings.length > 0 && <b>{state.bookings.length}</b>}
           </button>
-          <button className="host-button hidden sm:flex" onClick={() => setShowOrganiser(true)}>Host an event</button>
-          <button className="profile-button" aria-label="Open my tickets" onClick={() => setShowTickets(true)}><UserRound size={17} /></button>
+          <button className="host-button hidden sm:flex" onClick={openOrganiser}>Host an event</button>
+          <button className="profile-button" aria-label="Open my tickets" onClick={openTicketsList}><UserRound size={17} /></button>
           <button className="profile-button md:hidden" aria-label="Open menu" onClick={() => notify("Use the buttons above to explore or open your tickets")}><Menu size={18} /></button>
         </div>
       </nav>
@@ -177,8 +186,8 @@ export default function Home() {
           <div className="hero-feature" style={{ backgroundImage: `url(${featuredEvent.image})` }}>
             <div className="hero-feature-shade" />
             <div className="hero-date-card"><span>{eventDate(featuredEvent).month}</span><strong>{eventDate(featuredEvent).day}</strong></div>
-            <div className="hero-feature-topline"><span className="live-pill"><span /> Happening soon</span><button className="hero-save" aria-label="Save featured event" onClick={() => toggleSaved(featuredEvent.id)}><Heart size={17} fill={state.savedIds.includes(featuredEvent.id) ? "currentColor" : "none"} /></button></div>
-            <div className="hero-feature-content"><div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.15em] text-white/70"><span>{eventDate(featuredEvent).date}</span><span className="text-white/40">•</span><span>{featuredEvent.city}</span></div><h2>{featuredEvent.title}</h2><div className="mt-4 flex items-center justify-between gap-4"><div className="flex items-center gap-2 text-[13px] text-white/80"><MapPin size={14} /> {featuredEvent.location}</div><button className="feature-arrow" onClick={() => setSelectedEvent(featuredEvent)} aria-label="View featured event"><ArrowUpRight size={19} /></button></div></div>
+            <div className="hero-feature-topline"><span className="live-pill"><span /> Happening soon</span><button className="hero-save" aria-label="Save featured event" onClick={() => void toggleSaved(featuredEvent.id)}><Heart size={17} fill={state.savedIds.includes(featuredEvent.id) ? "currentColor" : "none"} /></button></div>
+            <div className="hero-feature-content"><div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.15em] text-white/70"><span>{eventDate(featuredEvent).date}</span><span className="text-white/40">•</span><span>{featuredEvent.city}</span></div><h2>{featuredEvent.title}</h2><div className="mt-4 flex items-center justify-between gap-4"><div className="flex items-center gap-2 text-[13px] text-white/80"><MapPin size={14} /> {featuredEvent.location}</div><button className="feature-arrow" onClick={() => openTickets(featuredEvent)} aria-label="View featured event"><ArrowUpRight size={19} /></button></div></div>
           </div>
         </div>
       </section>
@@ -191,18 +200,18 @@ export default function Home() {
         </div>
         <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="section-kicker"><span /> {filters.city === "All cities" ? "Across India" : `In ${filters.city}`}</p><h2 className="section-title mt-2">Plans for your kind of people</h2></div><div className="flex items-center gap-2 text-[12px] font-semibold text-[#8a8880]"><span>{discovered.length} plans</span><span className="text-[#c6c3ba]">•</span><button className="sort-button" onClick={() => setFilters((current) => ({ ...current, sort: current.sort === "recommended" ? "soonest" : current.sort === "soonest" ? "price" : "recommended" }))}>{filters.sort === "recommended" ? "Recommended" : filters.sort === "soonest" ? "Soonest" : "Lowest price"} <ChevronDown size={14} /></button></div></div>
 
-        {!ready ? <div className="loading-state"><span className="loading-dot" /> Loading local plans...</div> : discovered.length > 0 ? <div className="event-grid">{discovered.map((event, index) => <EventCard key={event.id} event={event} index={index} saved={state.savedIds.includes(event.id)} onSave={() => toggleSaved(event.id)} onTicket={() => setSelectedEvent(event)} />)}</div> : <div className="empty-state"><div className="empty-icon"><Search size={22} /></div><h3>No plans found yet</h3><p>Try a different city, category, or search term.</p><button onClick={() => setFilters(initialFilters)}>Clear all filters</button></div>}
+        {!ready ? <div className="loading-state"><span className="loading-dot" /> Loading shared plans...</div> : discovered.length > 0 ? <div className="event-grid">{discovered.map((event, index) => <EventCard key={event.id} event={event} index={index} saved={state.savedIds.includes(event.id)} onSave={() => void toggleSaved(event.id)} onTicket={() => openTickets(event)} />)}</div> : <div className="empty-state"><div className="empty-icon"><Search size={22} /></div><h3>No plans found yet</h3><p>Try a different city, category, or search term.</p><button onClick={() => setFilters(initialFilters)}>Clear all filters</button></div>}
 
-        <div className="organiser-panel mt-20" id="organisers"><div className="organiser-copy"><div className="organiser-icon"><Sparkles size={17} /></div><p className="section-kicker light"><span /> Made for the people making plans</p><h2>Got a room, a reason, or a really good idea?</h2><p>List your event, reach the right crowd, and spend less time wrestling with ticketing.</p><button onClick={() => setShowOrganiser(true)}>Start hosting <ArrowRight size={16} /></button></div><div className="organiser-stats"><div><strong>12k<span>+</span></strong><span>people discovering<br />events each week</span></div><div><strong>0<span>%</span></strong><span>listing fee for<br />your first event</span></div></div><div className="organiser-scribble">made<br />local <ArrowUpRight size={23} /></div></div>
+        <div className="organiser-panel mt-20" id="organisers"><div className="organiser-copy"><div className="organiser-icon"><Sparkles size={17} /></div><p className="section-kicker light"><span /> Made for the people making plans</p><h2>Got a room, a reason, or a really good idea?</h2><p>List your event, reach the right crowd, and spend less time wrestling with ticketing.</p><button onClick={openOrganiser}>Start hosting <ArrowRight size={16} /></button></div><div className="organiser-stats"><div><strong>12k<span>+</span></strong><span>people discovering<br />events each week</span></div><div><strong>0<span>%</span></strong><span>listing fee for<br />your first event</span></div></div><div className="organiser-scribble">made<br />local <ArrowUpRight size={23} /></div></div>
       </section>
 
       <section id="how-it-works" className="how-section border-t border-[#e4e1d8] bg-[#efeee8]"><div className="mx-auto flex max-w-[1280px] flex-col justify-between gap-8 px-5 py-12 sm:flex-row sm:items-center lg:px-8"><div><p className="section-kicker"><span /> No endless scrolling required</p><h2 className="mt-2 text-[23px] font-semibold tracking-[-0.04em]">The easy way to make a plan.</h2></div><div className="steps-row"><div><b>01</b><span>Find your<br />kind of night</span></div><ArrowRight className="step-arrow" size={17} /><div><b>02</b><span>Save a spot<br />in seconds</span></div><ArrowRight className="step-arrow" size={17} /><div><b>03</b><span>Show up<br />and have fun</span></div></div></div></section>
-      <footer className="mx-auto flex max-w-[1280px] flex-col justify-between gap-5 px-5 py-8 text-[12px] font-medium text-[#96938a] sm:flex-row sm:items-center lg:px-8"><a href="#top" className="brand-mark footer-brand">scene<span>.</span></a><div className="flex gap-5"><a href="#explore">Explore</a><button onClick={() => setShowOrganiser(true)}>Host an event</button><a href="#how-it-works">About</a></div><span>© 2026 scene. Made for going out.</span></footer>
+      <footer className="mx-auto flex max-w-[1280px] flex-col justify-between gap-5 px-5 py-8 text-[12px] font-medium text-[#96938a] sm:flex-row sm:items-center lg:px-8"><a href="#top" className="brand-mark footer-brand">scene<span>.</span></a><div className="flex gap-5"><a href="#explore">Explore</a><button onClick={openOrganiser}>Host an event</button><a href="#how-it-works">About</a></div><span>© 2026 scene. Made for going out.</span></footer>
 
-      {storageError && <div className="storage-notice" role="status"><span><Sparkles size={14} /> {storageError}</span><button onClick={() => notify("Clear site storage from your browser settings to reset the demo")}>Help</button></div>}
-      {selectedEvent && <TicketCheckout event={selectedEvent} available={Math.max(0, selectedEvent.capacity - state.bookings.filter((booking) => booking.event.id === selectedEvent.id).reduce((total, booking) => total + booking.quantity, 0))} onClose={() => setSelectedEvent(null)} onBook={handleBook} onViewTickets={() => { setSelectedEvent(null); setShowTickets(true); }} />}
-      {showTickets && <MyTickets bookings={state.bookings} onClose={() => setShowTickets(false)} />}
-      {showOrganiser && <OrganiserStudio events={state.events} bookings={state.bookings} onClose={() => setShowOrganiser(false)} onCreate={handleCreateEvent} onCheckIn={handleCheckIn} />}
+      {storageError && <div className="storage-notice" role="status"><span><Sparkles size={14} /> {storageError}</span><button onClick={() => notify(supabaseEnabled ? "Apply the Supabase migration, then redeploy" : "Clear site storage from your browser settings to reset the demo")}>Help</button></div>}
+      {selectedEvent && <TicketCheckout event={selectedEvent} available={state.availability[selectedEvent.id] ?? selectedEvent.capacity} sharedMode={supabaseEnabled} onClose={() => setSelectedEvent(null)} onBook={handleBook} onViewTickets={() => { setSelectedEvent(null); openTicketsList(); }} />}
+      {showTickets && <MyTickets bookings={state.bookings} sharedMode={supabaseEnabled} onClose={() => setShowTickets(false)} />}
+      {showOrganiser && <OrganiserStudio events={state.managedEvents} bookings={state.managedBookings} sharedMode={supabaseEnabled} onClose={() => setShowOrganiser(false)} onCreate={handleCreateEvent} onCheckIn={handleCheckIn} />}
       {toast && <div className="toast"><Check size={15} /> {toast}</div>}
     </main>
   );
