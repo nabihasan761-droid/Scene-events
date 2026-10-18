@@ -95,7 +95,10 @@ export default function Home() {
   };
 
   const openTicketsList = () => {
-    if (!requireUser("view your tickets")) return;
+    if (supabaseEnabled && !user) {
+      loginFor("manage your tickets");
+      return;
+    }
     setShowTickets(true);
   };
 
