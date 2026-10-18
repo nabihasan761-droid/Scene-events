@@ -1130,6 +1130,106 @@
 
 .toast svg { color: #dbe862; }
 
+.account-gate {
+  padding: 35px 31px 29px;
+}
+
+.account-gate-mark {
+  align-items: center;
+  background: #25241f;
+  border-radius: 10px;
+  color: #dbe862;
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  margin-bottom: 21px;
+  width: 42px;
+}
+
+.account-gate h2 {
+  color: #292823;
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.075em;
+  line-height: 1;
+  margin-top: 10px;
+}
+
+.account-gate-copy {
+  color: #89867d;
+  font-size: 12px;
+  line-height: 1.55;
+  margin-top: 13px;
+  max-width: 330px;
+}
+
+.account-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 23px;
+}
+
+.account-choice {
+  align-items: center;
+  border: 1px solid #e4e0d6;
+  border-radius: 10px;
+  color: #6d6960;
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  transition: all 160ms ease;
+}
+
+.account-choice:hover,
+.account-choice.primary {
+  border-color: #25241f;
+  color: #25241f;
+}
+
+.account-choice.primary {
+  background: #25241f;
+  color: #fff;
+}
+
+.account-choice-icon {
+  align-items: center;
+  background: #f0efea;
+  border-radius: 8px;
+  color: #ee6658;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.account-choice.primary .account-choice-icon {
+  background: #dbe862;
+  color: #3d4321;
+}
+
+.account-choice > span:nth-child(2) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-choice strong { font-size: 12px; font-weight: 800; }
+.account-choice small { color: #9d9a91; font-size: 10px; }
+.account-choice.primary small { color: #aaa79e; }
+.account-choice > svg { opacity: .55; }
+
+.account-continue {
+  color: #a09d93;
+  display: block;
+  font-size: 11px;
+  font-weight: 750;
+  margin: 17px auto 0;
+}
+
+.account-continue:hover { color: #ee6658; }
+
 .loading-state {
   align-items: center;
   background: #fff;

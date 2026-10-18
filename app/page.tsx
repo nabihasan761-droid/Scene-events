@@ -28,6 +28,7 @@ import {
 import { useSceneStore } from "@/lib/use-scene-store";
 import { MyTickets, TicketCheckout } from "@/components/ticket-checkout";
 import { OrganiserStudio } from "@/components/organiser-studio";
+import { AccountGate } from "@/components/account-gate";
 
 const initialFilters: EventFilters = {
   city: "Mumbai",
@@ -46,6 +47,8 @@ export default function Home() {
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
   const [showTickets, setShowTickets] = useState(false);
   const [showOrganiser, setShowOrganiser] = useState(false);
+  const [showAccountGate, setShowAccountGate] = useState(false);
+  const [accountIntent, setAccountIntent] = useState("manage your tickets");
   const [toast, setToast] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
 
@@ -63,10 +66,8 @@ export default function Home() {
   };
 
   const loginFor = (action: string) => {
-    notify(`Sign in to ${action}`);
-    window.setTimeout(() => {
-      window.location.assign(`/auth/login?next=${encodeURIComponent("/")}`);
-    }, 450);
+    setAccountIntent(action);
+    setShowAccountGate(true);
   };
 
   const requireUser = (action: string) => {
@@ -212,6 +213,7 @@ export default function Home() {
       {selectedEvent && <TicketCheckout event={selectedEvent} available={state.availability[selectedEvent.id] ?? selectedEvent.capacity} sharedMode={supabaseEnabled} onClose={() => setSelectedEvent(null)} onBook={handleBook} onViewTickets={() => { setSelectedEvent(null); openTicketsList(); }} />}
       {showTickets && <MyTickets bookings={state.bookings} sharedMode={supabaseEnabled} onClose={() => setShowTickets(false)} />}
       {showOrganiser && <OrganiserStudio events={state.managedEvents} bookings={state.managedBookings} sharedMode={supabaseEnabled} onClose={() => setShowOrganiser(false)} onCreate={handleCreateEvent} onCheckIn={handleCheckIn} />}
+      {showAccountGate && <AccountGate intent={accountIntent} onClose={() => setShowAccountGate(false)} />}
       {toast && <div className="toast"><Check size={15} /> {toast}</div>}
     </main>
   );
